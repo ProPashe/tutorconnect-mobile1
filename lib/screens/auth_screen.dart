@@ -79,17 +79,19 @@ class _AuthScreenState extends State<AuthScreen> {
                         labelText: 'Full Name',
                         border: OutlineInputBorder(),
                       ),
-                      validator: (val) => val == null || val.isEmpty ? 'Enter name' : null,
+                      validator: (val) =>
+                          val == null || val.isEmpty ? 'Enter name' : null,
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _selectedRole,
+                      initialValue: _selectedRole,
                       decoration: const InputDecoration(
                         labelText: 'Account Type',
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'student', child: Text('Student')),
+                        DropdownMenuItem(
+                            value: 'student', child: Text('Student')),
                         DropdownMenuItem(value: 'tutor', child: Text('Tutor')),
                       ],
                       onChanged: (val) => setState(() => _selectedRole = val!),
@@ -103,7 +105,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.emailAddress,
-                    validator: (val) => val == null || !val.contains('@') ? 'Invalid email' : null,
+                    validator: (val) => val == null || !val.contains('@')
+                        ? 'Invalid email'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -113,7 +117,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       border: OutlineInputBorder(),
                     ),
                     obscureText: true,
-                    validator: (val) => val == null || val.length < 6 ? 'Password too short' : null,
+                    validator: (val) => val == null || val.length < 6
+                        ? 'Password too short'
+                        : null,
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(

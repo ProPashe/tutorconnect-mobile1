@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'services/supabase_service.dart';
 import 'screens/auth_screen.dart';
-import 'screens/student_dashboard.dart';
-import 'screens/tutor_dashboard.dart';
+import 'screens/main_layout.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,15 +33,7 @@ class TutorConnectApp extends StatelessWidget {
     return MaterialApp(
       title: 'TutorConnect',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
-          primary: const Color(0xFF2563EB),
-          secondary: const Color(0xFF10B981),
-        ),
-        textTheme: GoogleFonts.interTextTheme(),
-      ),
+      theme: AppTheme.lightTheme,
       home: const AuthWrapper(),
     );
   }
@@ -70,9 +61,9 @@ class AuthWrapper extends StatelessWidget {
         if (profile == null) return const AuthScreen();
 
         if (profile['role'] == 'tutor') {
-          return const TutorDashboard();
+          return const MainLayout(role: 'tutor');
         } else {
-          return const StudentDashboard();
+          return const MainLayout(role: 'student');
         }
       },
     );

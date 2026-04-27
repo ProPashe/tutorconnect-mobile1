@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../services/supabase_service.dart';
 import 'wallet_screen.dart';
-import 'chat_screen.dart';
 
 class TutorDashboard extends StatelessWidget {
   const TutorDashboard({super.key});
@@ -19,7 +18,8 @@ class TutorDashboard extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(LucideIcons.wallet),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletScreen())),
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const WalletScreen())),
           ),
           IconButton(
             icon: const Icon(LucideIcons.logOut),
@@ -38,7 +38,8 @@ class TutorDashboard extends StatelessWidget {
                 CircleAvatar(
                   radius: 32,
                   backgroundColor: Theme.of(context).colorScheme.secondary,
-                  child: const Icon(LucideIcons.user, color: Colors.white, size: 32),
+                  child: const Icon(LucideIcons.user,
+                      color: Colors.white, size: 32),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -47,7 +48,8 @@ class TutorDashboard extends StatelessWidget {
                     children: [
                       Text(
                         'Welcome, ${profile?['display_name'] ?? 'Tutor'}',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       const Text('Ready to help someone learn?'),
                     ],
@@ -62,7 +64,9 @@ class TutorDashboard extends StatelessWidget {
               children: [
                 Icon(LucideIcons.search, size: 18),
                 SizedBox(width: 8),
-                Text('Available Requests', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('Available Requests',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -78,9 +82,11 @@ class TutorDashboard extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(LucideIcons.clipboardList, size: 48, color: Colors.grey[300]),
+                        Icon(LucideIcons.clipboardList,
+                            size: 48, color: Colors.grey[300]),
                         const SizedBox(height: 16),
-                        const Text('No open requests right now.', style: TextStyle(color: Colors.grey)),
+                        const Text('No open requests right now.',
+                            style: TextStyle(color: Colors.grey)),
                       ],
                     ),
                   );
@@ -109,17 +115,23 @@ class TutorDashboard extends StatelessWidget {
                               children: [
                                 Text(
                                   req['subject'],
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: Colors.green[50],
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     '\$${req['budget_min']} - \$${req['budget_max']}',
-                                    style: TextStyle(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                        color: Colors.green[700],
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ],
@@ -135,11 +147,14 @@ class TutorDashboard extends StatelessWidget {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: () => _showBidDialog(context, req['id']),
+                                onPressed: () =>
+                                    _showBidDialog(context, req['id']),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  backgroundColor:
+                                      Theme.of(context).colorScheme.primary,
                                   foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8)),
                                 ),
                                 child: const Text('Place a Bid'),
                               ),
@@ -176,13 +191,16 @@ class TutorDashboard extends StatelessWidget {
             ),
             TextField(
               controller: messageController,
-              decoration: const InputDecoration(labelText: 'Message to student'),
+              decoration:
+                  const InputDecoration(labelText: 'Message to student'),
               maxLines: 3,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               Provider.of<SupabaseService>(context, listen: false).placeBid(

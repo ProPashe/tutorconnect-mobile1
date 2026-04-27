@@ -12,8 +12,6 @@ class WalletScreen extends StatefulWidget {
 }
 
 class _WalletScreenState extends State<WalletScreen> {
-  bool _isLoading = false;
-
   void _showTopUpDialog() {
     final amountController = TextEditingController();
     showDialog(
@@ -123,7 +121,7 @@ class _WalletScreenState extends State<WalletScreen> {
                     
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: isNegative ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                        backgroundColor: isNegative ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
                         child: Icon(
                           isNegative ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
                           color: isNegative ? Colors.red : Colors.green,
