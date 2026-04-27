@@ -1,0 +1,8 @@
+{
+  "name": "TutorConnect Mobile",
+  "description": "Secure tutoring marketplace with Paynow integration, wallet management, and real-time chat. Built with Flutter and Supabase.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

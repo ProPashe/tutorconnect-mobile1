@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // DEFAULT DENY
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // GLOBAL HELPERS
+    // ===============================================================
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["admin", "super-admin"] ||
+        (request.auth.token.email in ["mudzimwapanashe123@gmail.com", "mudzimwapanashe506@gmail.com"] && request.auth.token.email_verified == true)
+      );
+    }
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function isVerifiedEmail() {
+      return request.auth.token.email_verified == true;
+    }
+
+    // ===============================================================
+    // VALIDATION HELPERS
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['full_name', 'email', 'role']) &&
+             data.full_name is string && data.full_name.size() > 0 && data.full_name.size() <= 100 &&
+             data.email is string && data.email.matches('^[^@]+@[^@]+\\.[^@]+$') &&
+             data.role in ["student", "tutor", "admin", "super-admin"] &&
+             (data.get('wallet_balance', 0) is number) &&
+             (data.get('is_registered', false) is bool) &&
+             (data.get('photo_url', '') is string) &&
+             (data.get('phone', '') is string) &&
+             (data.get('city', '') is string) &&
+             (data.get('curriculum', '') is string) &&
+             (data.get('academic_level', '') is string) &&
+             (data.get('subjects', []) is list) &&
+             (data.get('referral_code', '') is string);
+    }
+
+    function isValidTutorProfile(data) {
+      return data.get('is_verified', false) is bool &&
+             (data.get('curriculum', 'ZIMSEC') in ["ZIMSEC", "Cambridge", "Both"]) &&
+             (data.get('verification_score', 0) is number) &&
+             (data.get('bio', '').size() <= 3000) &&
+             (data.get('teaching_experience', '').size() <= 1000);
+    }
+
+    function isValidLessonRequest(data) {
+      return data.keys().hasAll(['student_id', 'subject_id', 'offered_price', 'status']) &&
+             data.student_id == request.auth.uid &&
+             data.offered_price is number && data.offered_price > 0 &&
+             data.status in ["open", "matched", "closed"];
+    }
+
+    function isValidBid(data) {
+      return data.keys().hasAll(['request_id', 'tutor_id', 'amount', 'status']) &&
+             data.tutor_id == request.auth.uid &&
+             data.amount is number && data.amount > 0 &&
+             data.status in ["pending", "accepted", "rejected", "expired"];
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['user_id', 'amount', 'type', 'created_at']) &&
+             data.amount is number &&
+             data.type in ["escrow_hold", "tutor_payout", "platform_fee", "bid_fee", "referral_reward", "top_up"] &&
+             data.created_at == request.time;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['sender_id', 'message_text', 'created_at']) &&
+             data.sender_id == request.auth.uid &&
+             data.message_text is string && data.message_text.size() <= 1000 &&
+             data.created_at == request.time;
+    }
+
+    // ===============================================================
+    // ENTITY MATCHES
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) && incoming().role != 'admin' && incoming().role != 'super-admin';
+      allow update: if (
+        isOwner(userId) && 
+        isValidUser(incoming()) && 
+        incoming().role == existing().role && 
+        incoming().wallet_balance == existing().wallet_balance &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'full_name', 'phone', 'photo_url', 'is_registered', 
+          'city', 'curriculum', 'academic_level', 'subjects', 
+          'referral_code', 'referred_by', 'updated_at'
+        ])
+      ) || isAdmin();
+    }
+
+    match /tutor_profiles/{tutorId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(tutorId) && isValidId(tutorId) && isValidTutorProfile(incoming()) && incoming().is_verified == false;
+      allow update: if (
+        isOwner(tutorId) && 
+        isValidTutorProfile(incoming()) && 
+        incoming().is_verified == existing().is_verified &&
+        incoming().verification_score == existing().verification_score &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['bio', 'teaching_experience', 'languages', 'subjects', 'levels', 'payout_method', 'payout_details'])
+      ) || isAdmin();
+    }
+
+    match /lesson_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isVerifiedEmail() && isValidLessonRequest(incoming()) && exists(/databases/$(database)/documents/subjects/$(incoming().subject_id));
+      allow update: if (
+        isOwner(existing().student_id) && 
+        isValidLessonRequest(incoming()) && 
+        incoming().student_id == existing().student_id &&
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['topic', 'offered_price', 'status'])
+        )
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /bids/{bidId} {
+      allow read: if isSignedIn();
+      allow create: if isVerifiedEmail() && isValidBid(incoming()) && exists(/databases/$(database)/documents/lesson_requests/$(incoming().request_id));
+      allow update: if (
+        isOwner(existing().tutor_id) && 
+        isValidBid(incoming()) && 
+        incoming().tutor_id == existing().tutor_id &&
+        incoming().request_id == existing().request_id &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'message', 'status'])
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /lessons/{lessonId} {
+      allow read: if isSignedIn() && (isOwner(existing().student_id) || isOwner(existing().tutor_id) || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /escrow_holding/{escrowId} {
+      allow read: if isSignedIn() && (isOwner(existing().student_id) || isOwner(existing().tutor_id) || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isOwner(existing().user_id) || isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn() && 
+        isValidTransaction(incoming()) && 
+        incoming().user_id == request.auth.uid &&
+        incoming().type == 'top_up' // Only top-ups can be created by users (simulated billing)
+      );
+      allow update, delete: if false; // Transactions are immutable
+    }
+
+    match /admin_ledgers/{ledgerId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /chat_rooms/{roomId} {
+      allow read: if isSignedIn() && (isOwner(existing().student_id) || isOwner(existing().tutor_id) || isAdmin());
+      allow create: if isSignedIn() && (isOwner(incoming().student_id) || isOwner(incoming().tutor_id) || isAdmin());
+      
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (
+          get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.student_id == request.auth.uid || 
+          get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.tutor_id == request.auth.uid || 
+          isAdmin()
+        );
+        allow create: if isVerifiedEmail() && isValidMessage(incoming()) && (
+          get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.student_id == request.auth.uid || 
+          get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.tutor_id == request.auth.uid
+        );
+      }
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isOwner(existing().user_id);
+      allow write: if isAdmin();
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

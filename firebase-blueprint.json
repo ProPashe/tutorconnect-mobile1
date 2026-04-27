@@ -1,0 +1,231 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "User profile for students, tutors, and admins",
+      "type": "object",
+      "properties": {
+        "full_name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "role": { "type": "string", "enum": ["student", "tutor", "admin", "super-admin"], "description": "User role" },
+        "wallet_balance": { "type": "number", "description": "Current balance in USD" },
+        "referral_code": { "type": "string", "description": "Unique referral code" },
+        "referred_by": { "type": "string", "description": "UID of the referrer" },
+        "referral_count": { "type": "integer", "description": "Number of successful referrals" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["full_name", "email", "role"]
+    },
+    "tutor_profiles": {
+      "title": "Tutor Profile",
+      "description": "Extended profile for tutors with verification data",
+      "type": "object",
+      "properties": {
+        "national_id_number": { "type": "string" },
+        "bio": { "type": "string" },
+        "teaching_experience": { "type": "string" },
+        "languages": { "type": "array", "items": { "type": "string" } },
+        "id_document_url": { "type": "string" },
+        "certificate_url": { "type": "string" },
+        "qualification_url": { "type": "string" },
+        "curriculum": { "type": "string", "enum": ["ZIMSEC", "Cambridge", "Both"] },
+        "levels": { "type": "array", "items": { "type": "string" } },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "payout_method": { "type": "string", "enum": ["EcoCash", "InnBucks", "Bank Transfer"] },
+        "payout_details": { "type": "string" },
+        "is_verified": { "type": "boolean" },
+        "is_online": { "type": "boolean" },
+        "free_bids_remaining": { "type": "integer", "description": "Number of free bids left" },
+        "verification_status": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "enum": ["pending", "verified", "failed", "missing"] },
+            "certificates": { "type": "string", "enum": ["pending", "verified", "failed", "missing", "checking"] },
+            "face_match": { "type": "string", "enum": ["pending", "verified", "failed", "missing"] },
+            "payout": { "type": "string", "enum": ["pending", "verified", "failed", "missing"] }
+          }
+        },
+        "verification_score": { "type": "number" },
+        "total_rating_sum": { "type": "integer" },
+        "total_ratings": { "type": "integer" },
+        "avg_rating": { "type": "number" }
+      }
+    },
+    "subjects": {
+      "title": "Subject",
+      "description": "Available subjects for tutoring",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "level": { "type": "string", "enum": ["O", "A"] },
+        "board": { "type": "string", "enum": ["ZIMSEC", "Cambridge"] }
+      },
+      "required": ["name", "level", "board"]
+    },
+    "lesson_requests": {
+      "title": "Lesson Request",
+      "description": "A request for a lesson posted by a student",
+      "type": "object",
+      "properties": {
+        "student_id": { "type": "string" },
+        "subject_id": { "type": "string" },
+        "topic": { "type": "string" },
+        "offered_price": { "type": "number" },
+        "status": { "type": "string", "enum": ["open", "matched", "closed"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["student_id", "subject_id", "offered_price", "status"]
+    },
+    "bids": {
+      "title": "Bid",
+      "description": "A bid placed by a tutor on a lesson request",
+      "type": "object",
+      "properties": {
+        "request_id": { "type": "string" },
+        "tutor_id": { "type": "string" },
+        "amount": { "type": "number" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "expired"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["request_id", "tutor_id", "amount", "status"]
+    },
+    "lessons": {
+      "title": "Lesson",
+      "description": "A confirmed lesson between a student and a tutor",
+      "type": "object",
+      "properties": {
+        "bid_id": { "type": "string" },
+        "scheduled_at": { "type": "string", "format": "date-time" },
+        "delivery_method": { "type": "string", "enum": ["online"] },
+        "meeting_link": { "type": "string", "description": "Zoom or Google Meet link" },
+        "meeting_type": { "type": "string", "enum": ["zoom", "meet"], "description": "Type of meeting platform" },
+        "status": { "type": "string", "enum": ["paid_escrow", "completed", "disputed", "refunded"] },
+        "student_confirmed": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "transactions": {
+      "title": "Transaction",
+      "description": "Financial transaction records",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string", "description": "UID of the user this transaction belongs to" },
+        "lesson_id": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["escrow_hold", "tutor_payout", "platform_fee", "bid_fee", "referral_reward", "top_up"] },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "chat_rooms": {
+      "title": "Chat Room",
+      "description": "A chat room for a lesson request",
+      "type": "object",
+      "properties": {
+        "request_id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "tutor_id": { "type": "string" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "chat_messages": {
+      "title": "Chat Message",
+      "description": "A message in a chat room",
+      "type": "object",
+      "properties": {
+        "room_id": { "type": "string" },
+        "sender_id": { "type": "string" },
+        "message_text": { "type": "string" },
+        "message_type": { "type": "string" },
+        "file_url": { "type": "string" },
+        "is_read": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "user_progress": {
+      "title": "User Progress",
+      "description": "Tracks completed sub-topics for students",
+      "type": "object",
+      "properties": {
+        "student_id": { "type": "string" },
+        "subject_id": { "type": "string" },
+        "completed_subtopics": { "type": "array", "items": { "type": "string" } },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["student_id", "subject_id", "completed_subtopics"]
+    },
+    "reviews": {
+      "title": "Review",
+      "description": "Post-session review from student to tutor",
+      "type": "object",
+      "properties": {
+        "lesson_id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "tutor_id": { "type": "string" },
+        "rating": { "type": "integer" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "comment": { "type": "string" },
+        "outside_payment_attempt": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lesson_id", "student_id", "tutor_id", "rating"]
+    },
+    "escrow_holding": {
+      "title": "Escrow Holding",
+      "description": "Funds held in escrow for active lessons",
+      "type": "object",
+      "properties": {
+        "lesson_id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "tutor_id": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["LOCKED", "RELEASED", "DISPUTED", "REFUNDED"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lesson_id", "student_id", "tutor_id", "amount", "status"]
+    },
+    "admin_ledgers": {
+      "title": "Admin Ledger",
+      "description": "Tracking revenue and marketing funds",
+      "type": "object",
+      "properties": {
+        "balance": { "type": "number" },
+        "last_settlement_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "notifications": {
+      "title": "Notification",
+      "description": "In-app notifications for users",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] },
+        "is_read": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "title", "message", "type"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": { "schema": "users", "description": "User profiles" },
+    "tutor_profiles/{userId}": { "schema": "tutor_profiles", "description": "Tutor specific data" },
+    "subjects/{subjectId}": { "schema": "subjects", "description": "Available subjects" },
+    "lesson_requests/{requestId}": { "schema": "lesson_requests", "description": "Student lesson requests" },
+    "bids/{bidId}": { "schema": "bids", "description": "Tutor bids on requests" },
+    "lessons/{lessonId}": { "schema": "lessons", "description": "Confirmed lessons" },
+    "transactions/{transactionId}": { "schema": "transactions", "description": "Financial records" },
+    "escrow_holding/{escrowId}": { "schema": "escrow_holding", "description": "Escrow funds" },
+    "admin_ledgers/{ledgerId}": { "schema": "admin_ledgers", "description": "Admin financial tracking" },
+    "chat_rooms/{roomId}": { "schema": "chat_rooms", "description": "Chat rooms" },
+    "chat_rooms/{roomId}/messages/{messageId}": { "schema": "chat_messages", "description": "Messages within a chat room" },
+    "user_progress/{progressId}": { "schema": "user_progress", "description": "Student progress tracking" },
+    "reviews/{reviewId}": { "schema": "reviews", "description": "Post-session reviews" },
+    "notifications/{notificationId}": { "schema": "notifications", "description": "In-app notifications" }
+  }
+}
