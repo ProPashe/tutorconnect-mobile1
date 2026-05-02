@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import '../services/supabase_service.dart';
+import '../services/paynow_service.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -12,6 +15,44 @@ class WalletScreen extends StatefulWidget {
 }
 
 class _WalletScreenState extends State<WalletScreen> {
+  final _paynowService = PaynowService();
+  bool _isPolling = false;
+  Timer? _pollingTimer;
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPolling(String pollUrl, double amount) {
+    setState(() => _isPolling = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Waiting for payment confirmation...')),
+    );
+    
+    // Poll every 5 seconds
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      try {
+        final status = await _paynowService.checkPaymentStatus(pollUrl);
+        if (status.paid) {
+          timer.cancel();
+          if (mounted) setState(() => _isPolling = false);
+          
+          // Payment successful, update balance
+          await Provider.of<SupabaseService>(context, listen: false).topUpWallet(amount);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Successfully topped up \$${amount.toStringAsFixed(2)}')),
+            );
+          }
+        }
+      } catch (e) {
+        // Silently handle polling errors, or log them
+      }
+    });
+  }
   void _showTopUpDialog() {
     final amountController = TextEditingController();
     showDialog(
@@ -36,7 +77,7 @@ class _WalletScreenState extends State<WalletScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: _isPolling ? null : () async {
               final amountStr = amountController.text.trim();
               if (amountStr.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -52,23 +93,32 @@ class _WalletScreenState extends State<WalletScreen> {
                 return;
               }
 
-              // Mock Paynow processing
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Processing payment via Paynow...')),
+                const SnackBar(content: Text('Initiating Paynow payment...')),
               );
               
               try {
-                await Provider.of<SupabaseService>(context, listen: false).topUpWallet(amount);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Successfully topped up \$${amount.toStringAsFixed(2)}')),
-                  );
+                final profile = Provider.of<SupabaseService>(context, listen: false).profile;
+                final email = profile?['email'] ?? 'user@tutorconnect.com';
+                
+                final response = await _paynowService.createPayment(amount, email);
+                
+                if (response.success && response.redirectUrl != null) {
+                  final url = Uri.parse(response.redirectUrl!);
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                    if (context.mounted) Navigator.pop(context);
+                    _startPolling(response.pollUrl!, amount);
+                  } else {
+                    throw Exception('Could not launch payment URL');
+                  }
+                } else {
+                  throw Exception('Failed to create Paynow transaction');
                 }
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to top up: $e')),
+                    SnackBar(content: Text('Payment failed: $e')),
                   );
                 }
               }
@@ -116,9 +166,11 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: _showTopUpDialog,
-                  icon: const Icon(LucideIcons.plus),
-                  label: const Text('Top Up with Paynow'),
+                  onPressed: _isPolling ? null : _showTopUpDialog,
+                  icon: _isPolling 
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(LucideIcons.plus),
+                  label: Text(_isPolling ? 'Confirming Payment...' : 'Top Up with Paynow'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Theme.of(context).colorScheme.primary,

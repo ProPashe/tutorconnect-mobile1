@@ -6,8 +6,13 @@ import 'screens/auth_screen.dart';
 import 'screens/main_layout.dart';
 import 'theme/app_theme.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
   
   // Initialize Supabase (Use your own URL and Anon Key here)
   await Supabase.initialize(
