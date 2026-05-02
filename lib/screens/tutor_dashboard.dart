@@ -203,12 +203,25 @@ class TutorDashboard extends StatelessWidget {
               child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
-              Provider.of<SupabaseService>(context, listen: false).placeBid(
-                requestId,
-                double.parse(amountController.text),
-                messageController.text,
-              );
-              Navigator.pop(context);
+              try {
+                final amount = double.parse(amountController.text);
+                if (amount <= 0) {
+                  throw const FormatException('Amount must be greater than 0');
+                }
+                Provider.of<SupabaseService>(context, listen: false).placeBid(
+                  requestId,
+                  amount,
+                  messageController.text,
+                );
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Bid placed successfully!')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid amount')),
+                );
+              }
             },
             child: const Text('Submit Bid'),
           ),

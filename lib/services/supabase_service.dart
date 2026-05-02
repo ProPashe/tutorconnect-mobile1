@@ -88,4 +88,24 @@ class SupabaseService extends ChangeNotifier {
         .eq('user_id', currentUser!.id)
         .order('created_at', ascending: false);
   }
+
+  Future<void> topUpWallet(double amount) async {
+    if (currentUser == null || _profile == null) return;
+    
+    final currentBalance = num.parse((_profile!['wallet_balance'] ?? 0.0).toString()).toDouble();
+    final newBalance = currentBalance + amount;
+    
+    await _supabase.from('profiles').update({
+      'wallet_balance': newBalance,
+    }).eq('id', currentUser!.id);
+    
+    await _supabase.from('transactions').insert({
+      'user_id': currentUser!.id,
+      'amount': amount,
+      'type': 'top_up',
+      'description': 'Wallet Top Up via Paynow',
+    });
+    
+    await loadProfile();
+  }
 }

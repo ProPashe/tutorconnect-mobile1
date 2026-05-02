@@ -36,14 +36,42 @@ class _WalletScreenState extends State<WalletScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
-              // In a real app, we would call the server API here:
-              // POST /api/paynow/topup -> returns pollUrl
-              // Then show a WebView for payment
+            onPressed: () async {
+              final amountStr = amountController.text.trim();
+              if (amountStr.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter an amount')),
+                );
+                return;
+              }
+              final amount = double.tryParse(amountStr);
+              if (amount == null || amount <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid amount')),
+                );
+                return;
+              }
+
+              // Mock Paynow processing
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Redirecting to Paynow... (Demo Only)')),
+                const SnackBar(content: Text('Processing payment via Paynow...')),
               );
-              Navigator.pop(context);
+              
+              try {
+                await Provider.of<SupabaseService>(context, listen: false).topUpWallet(amount);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Successfully topped up \$${amount.toStringAsFixed(2)}')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to top up: $e')),
+                  );
+                }
+              }
             },
             child: const Text('Proceed to Pay'),
           ),
