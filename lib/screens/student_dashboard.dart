@@ -58,9 +58,9 @@ class StudentDashboard extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 
-                FadeIn(
+                const FadeIn(
                   delay: 0.3,
-                  child: const SizedBox(
+                  child: SizedBox(
                     height: 400,
                     child: LessonRequestsList(),
                   ),

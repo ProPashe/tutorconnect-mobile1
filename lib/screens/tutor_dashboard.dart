@@ -32,7 +32,7 @@ class TutorDashboard extends StatelessWidget {
           // Tutor Banner
           Container(
             padding: const EdgeInsets.all(24),
-            color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+            color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
             child: Row(
               children: [
                 CircleAvatar(
@@ -104,7 +104,7 @@ class TutorDashboard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(color: Colors.grey[200]!),
                       ),
-                      margin: const EdgeInsets.bottom(12),
+                      margin: const EdgeInsets.only(bottom: 12),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
