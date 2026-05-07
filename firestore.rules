@@ -164,6 +164,13 @@ service cloud.firestore {
       allow update, delete: if false; // Transactions are immutable
     }
 
+    match /payment_attempts/{attemptId} {
+      // Only the backend (Admin SDK) may read or write payment attempts.
+      // No client access allowed — this prevents clients from marking
+      // their own payments as 'completed'.
+      allow read, write: if false;
+    }
+
     match /admin_ledgers/{ledgerId} {
       allow read, write: if isAdmin();
     }

@@ -57,22 +57,16 @@ class SupabaseService extends ChangeNotifier {
         .order('created_at');
   }
 
-  Future<void> placeBid(String requestId, double amount, String message) async {
-    await _supabase.from('bids').insert({
-      'request_id': requestId,
-      'tutor_id': currentUser!.id,
-      'amount': amount,
-      'message': message,
-      'status': 'pending',
-    });
-  }
-
-  // Wallet and Escrow (Calling the SQL Function we created)
-  Future<void> acceptBid(String bidId) async {
+  Future<void> postRequest(String subject, String description, double minBudget, double maxBudget, String scheduledDate) async {
     try {
-      await _supabase.rpc('accept_bid_and_pay', params: {
-        'p_bid_id': bidId,
+      await _supabase.rpc('post_request_and_pay_fee', params: {
         'p_student_id': currentUser!.id,
+        'p_subject': subject,
+        'p_description': description,
+        'p_budget_min': minBudget,
+        'p_budget_max': maxBudget,
+        'p_scheduled_date': scheduledDate,
+        'p_fee': 0.30,
       });
       await loadProfile(); // Refresh balance
     } catch (e) {
@@ -80,32 +74,16 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  // Get Wallet Transactions
-  Future<List<Map<String, dynamic>>> getTransactions() async {
+  // Wallet and Transactions are now handled by the backend.
+  // See ApiService in lib/services/api_service.dart
+  
+  // Get Wallet Transactions (Read-only from Supabase)
+  Future<List<Map<String, dynamic>>> getTransactions({int limit = 10, int offset = 0}) async {
     return await _supabase
         .from('transactions')
         .select()
         .eq('user_id', currentUser!.id)
-        .order('created_at', ascending: false);
-  }
-
-  Future<void> topUpWallet(double amount) async {
-    if (currentUser == null || _profile == null) return;
-    
-    final currentBalance = num.parse((_profile!['wallet_balance'] ?? 0.0).toString()).toDouble();
-    final newBalance = currentBalance + amount;
-    
-    await _supabase.from('profiles').update({
-      'wallet_balance': newBalance,
-    }).eq('id', currentUser!.id);
-    
-    await _supabase.from('transactions').insert({
-      'user_id': currentUser!.id,
-      'amount': amount,
-      'type': 'top_up',
-      'description': 'Wallet Top Up via Paynow',
-    });
-    
-    await loadProfile();
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
   }
 }

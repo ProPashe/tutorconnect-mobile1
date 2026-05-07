@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+import '../services/supabase_service.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 
@@ -22,32 +23,53 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final minBudget = double.tryParse(_minBudgetController.text);
+    final maxBudget = double.tryParse(_maxBudgetController.text);
+
+    if (minBudget == null || maxBudget == null || minBudget <= 0 || maxBudget <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter valid budget amounts')),
+      );
+      return;
+    }
+
+    if (maxBudget < minBudget) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Max budget must be ≥ Min budget')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
-    final supabase = Supabase.instance.client;
 
     try {
-      await supabase.from('lesson_requests').insert({
-        'student_id': supabase.auth.currentUser!.id,
-        'subject': _subjectController.text,
-        'description': _descriptionController.text,
-        'budget_min': double.parse(_minBudgetController.text),
-        'budget_max': double.parse(_maxBudgetController.text),
-        'scheduled_date': DateFormat('yyyy-MM-dd').format(_scheduledDate),
-        'status': 'open',
-      });
-      
+      // Uses the SQL RPC `post_request_and_pay_fee` which atomically
+      // deducts the $0.30 posting fee AND creates the request.
+      await Provider.of<SupabaseService>(context, listen: false).postRequest(
+        _subjectController.text.trim(),
+        _descriptionController.text.trim(),
+        minBudget,
+        maxBudget,
+        DateFormat('yyyy-MM-dd').format(_scheduledDate),
+      );
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Request posted successfully!')),
+          const SnackBar(
+            content: Text('✅ Request posted! \$0.30 posting fee deducted.'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -127,7 +149,28 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                   if (picked != null) setState(() => _scheduledDate = picked);
                 },
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.info, color: Colors.blue.shade700, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Posting a lesson request costs \$0.30. This will be deducted from your wallet balance.',
+                        style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isLoading ? null : _submit,
                 style: ElevatedButton.styleFrom(

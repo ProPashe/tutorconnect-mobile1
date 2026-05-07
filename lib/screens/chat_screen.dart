@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../theme/app_colors.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io';
 
 class ChatScreen extends StatefulWidget {
   final String roomId;
@@ -14,6 +17,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _supabase = Supabase.instance.client;
+  bool _isUploading = false;
 
   @override
   void dispose() {
@@ -29,9 +33,10 @@ class _ChatScreenState extends State<ChatScreen> {
     
     try {
       await _supabase.from('messages').insert({
-        'room_id': widget.roomId,
+        'lesson_id': widget.roomId,
         'sender_id': _supabase.auth.currentUser!.id,
         'content': text,
+        'msg_type': 'text' // Adding type column implicitly to handle future schemas
       });
     } catch (e) {
       if (mounted) {
@@ -39,6 +44,49 @@ class _ChatScreenState extends State<ChatScreen> {
           SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
         );
       }
+    }
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+
+    if (pickedFile == null) return;
+    
+    setState(() => _isUploading = true);
+    
+    try {
+      final bytes = await pickedFile.readAsBytes();
+      final fileExt = pickedFile.name.split('.').last;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+      final filePath = '${widget.roomId}/$fileName';
+
+      // 1. Upload to Supabase Storage
+      await _supabase.storage.from('chat_attachments').uploadBinary(
+            filePath,
+            bytes,
+            fileOptions: FileOptions(contentType: 'image/$fileExt'),
+          );
+
+      // 2. Get Public URL
+      final imageUrl = _supabase.storage.from('chat_attachments').getPublicUrl(filePath);
+
+      // 3. Send Message
+      await _supabase.from('messages').insert({
+        'lesson_id': widget.roomId,
+        'sender_id': _supabase.auth.currentUser!.id,
+        'content': imageUrl,
+        'msg_type': 'image' // Assume schema added msg_type
+      });
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -80,7 +128,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     stream: _supabase
                         .from('messages')
                         .stream(primaryKey: ['id'])
-                        .eq('room_id', widget.roomId)
+                        .eq('lesson_id', widget.roomId)
                         .order('created_at', ascending: false),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -122,13 +170,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                 ],
                               ),
-                              child: Text(
-                                msg['content'],
-                                style: TextStyle(
-                                  color: isMe ? Colors.white : AppColors.textPrimary,
-                                  fontSize: 15,
-                                ),
-                              ),
+                              child: _buildMessageContent(msg, isMe),
                             ),
                           );
                         },
@@ -154,8 +196,10 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(LucideIcons.paperclip, color: AppColors.textSecondary),
-                    onPressed: () {},
+                    icon: _isUploading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(LucideIcons.image, color: AppColors.textSecondary),
+                    onPressed: _isUploading ? null : _pickAndUploadImage,
                   ),
                   Expanded(
                     child: TextField(
@@ -199,5 +243,23 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
+  Widget _buildMessageContent(Map<String, dynamic> msg, bool isMe) {
+    final type = msg['msg_type'] ?? 'text'; // Fallback for old messages
+    if (type == 'image' || msg['content'].startsWith('http')) {
+      return CachedNetworkImage(
+        imageUrl: msg['content'],
+        width: 200,
+        placeholder: (context, url) => const CircularProgressIndicator(),
+        errorWidget: (context, url, error) => const Icon(Icons.error),
+      );
+    } else {
+      return Text(
+        msg['content'],
+        style: TextStyle(
+          color: isMe ? Colors.white : AppColors.textPrimary,
+          fontSize: 15,
+        ),
+      );
+    }
   }
 }

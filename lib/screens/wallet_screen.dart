@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../services/supabase_service.dart';
-import '../services/paynow_service.dart';
+import '../services/api_service.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -15,54 +15,146 @@ class WalletScreen extends StatefulWidget {
 }
 
 class _WalletScreenState extends State<WalletScreen> {
-  final _paynowService = PaynowService();
   bool _isPolling = false;
   Timer? _pollingTimer;
+
+  final ScrollController _scrollController = ScrollController();
+  List<Map<String, dynamic>> _transactions = [];
+  bool _isLoadingInitial = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  static const int _pageSize = 15;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTransactions(refresh: true);
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        _fetchTransactions();
+      }
+    });
+  }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  void _startPolling(String pollUrl, double amount) {
-    setState(() => _isPolling = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Waiting for payment confirmation...')),
-    );
-    
-    // Poll every 5 seconds
+  Future<void> _fetchTransactions({bool refresh = false}) async {
+    if (refresh) {
+      setState(() {
+        _isLoadingInitial = true;
+        _transactions.clear();
+        _hasMore = true;
+      });
+    }
+
+    if (!_hasMore || _isLoadingMore) return;
+
+    if (!refresh) {
+      setState(() => _isLoadingMore = true);
+    }
+
+    try {
+      final service = Provider.of<SupabaseService>(context, listen: false);
+      final newTxs = await service.getTransactions(
+        limit: _pageSize,
+        offset: _transactions.length,
+      );
+
+      setState(() {
+        _transactions.addAll(newTxs);
+        _hasMore = newTxs.length == _pageSize;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load transactions: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingInitial = false;
+          _isLoadingMore = false;
+        });
+      }
+    }
+  }
+
+  /// Polls the backend (which proxies Paynow) until the payment is confirmed
+  /// or the max wait time elapses. The wallet balance is NOT updated here —
+  /// the backend webhook handles that. We only refresh the local profile so
+  /// the UI reflects the new balance once Firestore/Supabase is updated.
+  void _startPolling(String pollUrl) {
+    setState(() {
+      _isPolling = true;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Waiting for Paynow confirmation…'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+
+    int attempts = 0;
+    const maxAttempts = 60; // 5 minutes at 5s intervals
+
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      try {
-        final status = await _paynowService.checkPaymentStatus(pollUrl);
-        if (status.paid) {
-          timer.cancel();
-          if (mounted) setState(() => _isPolling = false);
-          
-          // Payment successful, update balance
-          await Provider.of<SupabaseService>(context, listen: false).topUpWallet(amount);
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Successfully topped up \$${amount.toStringAsFixed(2)}')),
-            );
-          }
+      attempts++;
+      if (attempts >= maxAttempts) {
+        timer.cancel();
+        if (mounted) {
+          setState(() => _isPolling = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment confirmation timed out. Check your wallet later.'),
+            ),
+          );
         }
-      } catch (e) {
-        // Silently handle polling errors, or log them
+        return;
+      }
+
+      try {
+        final paid = await ApiService.checkPaymentStatus(pollUrl);
+        if (paid) {
+          timer.cancel();
+          if (!mounted) return;
+          setState(() => _isPolling = false);
+          // Refresh profile so the UI reflects the updated balance
+          // (balance was already credited by the backend webhook).
+          await Provider.of<SupabaseService>(context, listen: false)
+              .loadProfile();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Payment confirmed! Balance updated.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (_) {
+        // Ignore transient poll errors — keep retrying
       }
     });
   }
+
   void _showTopUpDialog() {
     final amountController = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Top Up Wallet'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter amount to top up via Paynow (ZWL/USD)'),
+            const Text('Enter amount to top up via Paynow (USD)'),
             const SizedBox(height: 16),
             TextField(
               controller: amountController,
@@ -70,59 +162,68 @@ class _WalletScreenState extends State<WalletScreen> {
                 labelText: 'Amount (\$)',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-            onPressed: _isPolling ? null : () async {
-              final amountStr = amountController.text.trim();
-              if (amountStr.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter an amount')),
-                );
-                return;
-              }
-              final amount = double.tryParse(amountStr);
-              if (amount == null || amount <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter a valid amount')),
-                );
-                return;
-              }
+            onPressed: _isPolling
+                ? null
+                : () async {
+                    final amountStr = amountController.text.trim();
+                    final amount = double.tryParse(amountStr);
+                    if (amount == null || amount <= 0) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid amount')),
+                      );
+                      return;
+                    }
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Initiating Paynow payment...')),
-              );
-              
-              try {
-                final profile = Provider.of<SupabaseService>(context, listen: false).profile;
-                final email = profile?['email'] ?? 'user@tutorconnect.com';
-                
-                final response = await _paynowService.createPayment(amount, email);
-                
-                if (response.success && response.redirectUrl != null) {
-                  final url = Uri.parse(response.redirectUrl!);
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                    if (context.mounted) Navigator.pop(context);
-                    _startPolling(response.pollUrl!, amount);
-                  } else {
-                    throw Exception('Could not launch payment URL');
-                  }
-                } else {
-                  throw Exception('Failed to create Paynow transaction');
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Payment failed: $e')),
-                  );
-                }
-              }
-            },
+                    Navigator.pop(ctx);
+
+                    try {
+                      final profile =
+                          Provider.of<SupabaseService>(context, listen: false)
+                              .profile;
+                      final email =
+                          profile?['email'] ?? 'user@tutorconnect.co.zw';
+                      final userId = Provider.of<SupabaseService>(
+                        context,
+                        listen: false,
+                      ).currentUser?.id;
+
+                      if (userId == null) throw Exception('Not logged in');
+
+                      // Initiate via backend — backend creates the attempt doc
+                      // and returns the Paynow redirect + poll URLs.
+                      final result = await ApiService.initiateTopUp(
+                        userId: userId,
+                        amount: amount,
+                        email: email,
+                      );
+
+                      final url = Uri.parse(result.redirectUrl);
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                        if (result.pollUrl.isNotEmpty) {
+                          _startPolling(result.pollUrl);
+                        }
+                      } else {
+                        throw Exception('Could not open payment page');
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Payment failed: $e')),
+                        );
+                      }
+                    }
+                  },
             child: const Text('Proceed to Pay'),
           ),
         ],
@@ -181,47 +282,49 @@ class _WalletScreenState extends State<WalletScreen> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: service.getTransactions(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('No transactions yet.'));
-                }
+            child: _isLoadingInitial
+                ? const Center(child: CircularProgressIndicator())
+                : _transactions.isEmpty
+                    ? const Center(child: Text('No transactions yet.'))
+                    : RefreshIndicator(
+                        onRefresh: () => _fetchTransactions(refresh: true),
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _transactions.length + (_hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _transactions.length) {
+                              return const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Center(child: CircularProgressIndicator()),
+                              );
+                            }
 
-                final txs = snapshot.data!;
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: txs.length,
-                  itemBuilder: (context, index) {
-                    final tx = txs[index];
-                    final isNegative = tx['amount'] < 0;
-                    
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: isNegative ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
-                        child: Icon(
-                          isNegative ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
-                          color: isNegative ? Colors.red : Colors.green,
-                          size: 20,
+                            final tx = _transactions[index];
+                            final isNegative = tx['amount'] < 0;
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: isNegative ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
+                                child: Icon(
+                                  isNegative ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
+                                  color: isNegative ? Colors.red : Colors.green,
+                                  size: 20,
+                                ),
+                              ),
+                              title: Text(tx['type'].toString().toUpperCase().replaceAll('_', ' ')),
+                              subtitle: Text(DateFormat('MMM d, HH:mm').format(DateTime.parse(tx['created_at']))),
+                              trailing: Text(
+                                '${isNegative ? '-' : '+'}\$${tx['amount'].abs().toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isNegative ? Colors.red : Colors.green,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
-                      title: Text(tx['type'].toString().toUpperCase().replaceAll('_', ' ')),
-                      subtitle: Text(DateFormat('MMM d, HH:mm').format(DateTime.parse(tx['created_at']))),
-                      trailing: Text(
-                        '${isNegative ? '-' : '+'}\$${tx['amount'].abs().toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isNegative ? Colors.red : Colors.green,
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
           ),
         ],
       ),

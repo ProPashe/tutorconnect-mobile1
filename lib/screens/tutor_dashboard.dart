@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import 'wallet_screen.dart';
+import 'notifications_screen.dart';
 
 class TutorDashboard extends StatelessWidget {
   const TutorDashboard({super.key});
@@ -16,6 +18,13 @@ class TutorDashboard extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Tutor Dashboard'),
         actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.bell),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(LucideIcons.wallet),
             onPressed: () => Navigator.push(context,
@@ -176,56 +185,105 @@ class TutorDashboard extends StatelessWidget {
   void _showBidDialog(BuildContext context, String requestId) {
     final amountController = TextEditingController();
     final messageController = TextEditingController();
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Place your Bid'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              decoration: const InputDecoration(labelText: 'Amount (\$)'),
-              keyboardType: TextInputType.number,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Place your Bid'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                decoration: const InputDecoration(labelText: 'Amount (\$)'),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: messageController,
+                decoration: const InputDecoration(labelText: 'Message to student'),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
             ),
-            TextField(
-              controller: messageController,
-              decoration:
-                  const InputDecoration(labelText: 'Message to student'),
-              maxLines: 3,
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final amount = double.tryParse(amountController.text);
+                      if (amount == null || amount <= 0) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Please enter a valid amount')),
+                        );
+                        return;
+                      }
+                      final message = messageController.text.trim();
+                      if (message.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Please enter a message')),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => isSubmitting = true);
+
+                      try {
+                        final tutorId =
+                            Provider.of<SupabaseService>(context, listen: false)
+                                .currentUser
+                                ?.id;
+                        if (tutorId == null) throw Exception('Not logged in');
+
+                        // Routes through backend — deducts bid fee correctly.
+                        await ApiService.placeBid(
+                          tutorId: tutorId,
+                          requestId: requestId,
+                          amount: amount,
+                          message: message,
+                        );
+
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('✅ Bid placed successfully!'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } on ApiException catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(content: Text(e.message)),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(content: Text('Error: $e')),
+                          );
+                        }
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Submit Bid'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              try {
-                final amount = double.parse(amountController.text);
-                if (amount <= 0) {
-                  throw const FormatException('Amount must be greater than 0');
-                }
-                Provider.of<SupabaseService>(context, listen: false).placeBid(
-                  requestId,
-                  amount,
-                  messageController.text,
-                );
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Bid placed successfully!')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter a valid amount')),
-                );
-              }
-            },
-            child: const Text('Submit Bid'),
-          ),
-        ],
       ),
     );
   }

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'student_dashboard.dart';
 import 'tutor_dashboard.dart';
-import 'chat_screen.dart';
+import 'chat_list_screen.dart';
 import 'wallet_screen.dart';
+import 'my_lessons_screen.dart';
+import 'active_lessons_screen.dart';
 
 class MainLayout extends StatefulWidget {
   final String role; // 'student' or 'tutor'
@@ -26,17 +28,17 @@ class _MainLayoutState extends State<MainLayout> {
     
     _studentScreens = [
       const StudentDashboard(),
-      // Placeholder for Tutors list
-      const Scaffold(body: Center(child: Text('Tutors Directory'))),
-      const ChatScreen(roomId: 'placeholder'), // In a real app, this would be a chat list
+      // Active lessons for students
+      const ActiveLessonsScreen(),
+      const ChatListScreen(), 
       const WalletScreen(),
     ];
 
     _tutorScreens = [
       const TutorDashboard(),
-      // Placeholder for Requests
-      const Scaffold(body: Center(child: Text('Lesson Requests'))),
-      const ChatScreen(roomId: 'placeholder'),
+      // My Lessons for tutors
+      const MyLessonsScreen(),
+      const ChatListScreen(),
       const WalletScreen(),
     ];
   }
@@ -60,13 +62,13 @@ class _MainLayoutState extends State<MainLayout> {
         items: widget.role == 'tutor'
             ? const [
                 BottomNavigationBarItem(icon: Icon(LucideIcons.layoutDashboard), label: 'Dashboard'),
-                BottomNavigationBarItem(icon: Icon(LucideIcons.listTodo), label: 'Requests'),
+                BottomNavigationBarItem(icon: Icon(LucideIcons.listTodo), label: 'My Lessons'),
                 BottomNavigationBarItem(icon: Icon(LucideIcons.messageSquare), label: 'Messages'),
                 BottomNavigationBarItem(icon: Icon(LucideIcons.wallet), label: 'Wallet'),
               ]
             : const [
                 BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: 'Home'),
-                BottomNavigationBarItem(icon: Icon(LucideIcons.search), label: 'Tutors'),
+                BottomNavigationBarItem(icon: Icon(LucideIcons.playCircle), label: 'Active Lessons'),
                 BottomNavigationBarItem(icon: Icon(LucideIcons.messageSquare), label: 'Messages'),
                 BottomNavigationBarItem(icon: Icon(LucideIcons.wallet), label: 'Wallet'),
               ],

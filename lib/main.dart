@@ -14,10 +14,10 @@ void main() async {
   // Load environment variables
   await dotenv.load(fileName: ".env");
   
-  // Initialize Supabase (Use your own URL and Anon Key here)
+  // Initialize Supabase from .env (never hardcode credentials)
   await Supabase.initialize(
-    url: 'https://ilagkiizxpxbxzfujtmn.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlsYWdraWl6YnB4Ynh6ZnVqdG1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMjA3NjcsImV4cCI6MjA5MjU5Njc2N30.cF4CB1C-oaOxoA1ki8FBvXOPPb4QAwA88xLHBMoOKHU',
+    url: dotenv.env['SUPABASE_URL'] ?? '',
+    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
 
   runApp(
@@ -49,27 +49,34 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
-    
-    if (session == null) {
-      return const AuthScreen();
-    }
-    
-    return FutureBuilder(
-      future: Provider.of<SupabaseService>(context, listen: false).loadProfile(),
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
+        // Show loading while stream is initializing
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        
-        final profile = Provider.of<SupabaseService>(context).profile;
-        if (profile == null) return const AuthScreen();
 
-        if (profile['role'] == 'tutor') {
-          return const MainLayout(role: 'tutor');
-        } else {
-          return const MainLayout(role: 'student');
+        final session = snapshot.data?.session ?? Supabase.instance.client.auth.currentSession;
+
+        if (session == null) {
+          return const AuthScreen();
         }
+
+        return FutureBuilder(
+          future: Provider.of<SupabaseService>(context, listen: false).loadProfile(),
+          builder: (context, profileSnapshot) {
+            if (profileSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+
+            final profile = Provider.of<SupabaseService>(context).profile;
+            if (profile == null) return const AuthScreen();
+
+            final role = profile['role'] as String? ?? 'student';
+            return MainLayout(role: role);
+          },
+        );
       },
     );
   }
